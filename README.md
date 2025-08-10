@@ -40,7 +40,7 @@ int main() {
         printf("Bits per sample: %d\n", wav.fmt_chunk.bits_per_sample);
 
         // Raw PCM data
-        cint8_t* data = wav.data_chunk.data;
+        uint8_t* data = wav.data_chunk.data;
 
         // Free memory when done
         wave_free(&wav);
@@ -88,7 +88,7 @@ Loads a `.wav` file from disk (PCM only).
 
 ---
 
-### `void wave_save(const wchar_t *filepath, cint8_t *data, int32_t data_size, int16_t num_channels, int32_t sample_rate, sample_type_t sample_type)`
+### `void wave_save(const wchar_t *filepath, uint8_t *data, uint32_t data_size, uint16_t num_channels, uint32_t sample_rate, sample_type_t sample_type)`
 Writes raw PCM data to a `.wav` file.  
 - **Parameters:**  
   - `filepath` → path to save file (wide string)
@@ -111,9 +111,3 @@ Frees memory allocated by `wave_open`.
 - PCM format only (no compressed formats)
 - Little-endian `.wav` files only
 - Loads full file into memory (no streaming)
-
----
-
-## License
-This library is released into the public domain (or MIT License if preferred).  
-Free to use, modify, and distribute.
