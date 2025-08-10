@@ -272,6 +272,14 @@ inline wave_t wave_open(const wchar_t *filepath)
     return wave_file;
 }
 
+void wave_free(wave_t *wave)
+{
+    if (wave->is_loaded) {
+        free(wave->data_chunk.data);
+        wave->is_loaded = 0;
+    }
+}
+
 #ifdef _cplusplus
 }
 #endif

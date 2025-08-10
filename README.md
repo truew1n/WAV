@@ -4,6 +4,7 @@ A minimal single-header C library for reading and writing **.wav** audio files i
 ## Features
 - **Load** `.wav` files (PCM audio format only)
 - **Save** `.wav` files with custom sample rate, channels, and bit depth
+- **Free** loaded audio memory with a single function
 - Supports:
   - 8-bit unsigned integer samples
   - 16-bit unsigned integer samples
@@ -42,7 +43,7 @@ int main() {
         cint8_t* data = wav.data_chunk.data;
 
         // Free memory when done
-        free(wav.data_chunk.data);
+        wave_free(&wav);
     }
 
     return 0;
@@ -83,7 +84,7 @@ Loads a `.wav` file from disk (PCM only).
   - `fmt_chunk` → audio format details
   - `data_chunk` → raw PCM audio data
   - `is_loaded` → 1 if successful
-- **Notes:** Allocates memory for the audio data — you must `free(wav.data_chunk.data)` when done.
+- **Notes:** Use `wave_free` to release allocated memory.
 
 ---
 
@@ -96,6 +97,13 @@ Writes raw PCM data to a `.wav` file.
   - `num_channels` → number of channels (1 = mono, 2 = stereo, etc.)
   - `sample_rate` → samples per second (e.g., 44100)
   - `sample_type` → `suint8`, `suint16`, or `sfloat32`
+
+---
+
+### `void wave_free(wave_t *wave)`
+Frees memory allocated by `wave_open`.  
+- **Parameters:**  
+  - `wave` → pointer to a `wave_t` struct returned by `wave_open`.
 
 ---
 
