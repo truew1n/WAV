@@ -61,7 +61,7 @@ int main() {
     // Fill `samples` with your audio data here...
 
     wave_save(L"output.wav", (cint8_t*)samples,
-              sizeof(samples),
+              sizeof(samples) * sizeof(int16_t),
               1,               // num_channels
               44100,           // sample_rate
               suint16);        // sample_type
