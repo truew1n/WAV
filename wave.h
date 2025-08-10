@@ -40,29 +40,27 @@ typedef enum sample_type_t {
     sfloat32
 } sample_type_t;
 
-typedef char cint8_t;
-
 typedef struct wave_riff_chunk_t {
-    int32_t chunk_id;
-    int32_t chunk_size;
-    int32_t format;
+    uint32_t chunk_id;
+    uint32_t chunk_size;
+    uint32_t format;
 } wave_riff_chunk_t;
 
 typedef struct wave_fmt_chunk_t {
-    int32_t subchunk_id;
-    int32_t subchunk_size;
-    int16_t audio_format;
-    int16_t num_channels;
-    int32_t sample_rate;
-    int32_t byte_rate;
-    int16_t block_align;
-    int16_t bits_per_sample;
+    uint32_t subchunk_id;
+    uint32_t subchunk_size;
+    uint16_t audio_format;
+    uint16_t num_channels;
+    uint32_t sample_rate;
+    uint32_t byte_rate;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
 } wave_fmt_chunk_t;
 
 typedef struct wave_data_chunk_t {
-    int32_t subchunk_id;
-    int32_t subchunk_size;
-    cint8_t *data;
+    uint32_t subchunk_id;
+    uint32_t subchunk_size;
+    uint8_t *data;
 } wave_data_chunk_t;
 
 typedef struct wave_t {
@@ -76,22 +74,22 @@ typedef struct wave_t {
 inline int32_t get_file_size(FILE *file)
 {
     fseek(file, 0L, SEEK_END);
-    int32_t size = ftell(file);
+    uint32_t size = ftell(file);
     rewind(file);
     return size;
 }
 
-inline int32_t wave_calculate_byte_rate(int32_t sample_rate, int16_t num_channels, int16_t bits_per_sample)
+inline uint32_t wave_calculate_byte_rate(uint32_t sample_rate, uint16_t num_channels, uint16_t bits_per_sample)
 {
     return sample_rate * num_channels * (bits_per_sample / 8);
 }
 
-inline int16_t wave_calculate_block_align(int16_t num_channels, int16_t bits_per_sample)
+inline uint16_t wave_calculate_block_align(uint16_t num_channels, uint16_t bits_per_sample)
 {
     return num_channels * (bits_per_sample / 8);
 }
 
-inline int16_t wave_get_bits_per_sample(sample_type_t sample_type)
+inline uint16_t wave_get_bits_per_sample(sample_type_t sample_type)
 {
     switch (sample_type) {
         case suint8: {
@@ -109,7 +107,7 @@ inline int16_t wave_get_bits_per_sample(sample_type_t sample_type)
     }
 }
 
-inline void wave_save(const wchar_t *filepath, cint8_t *data, int32_t data_size, int16_t num_channels, int32_t sample_rate, sample_type_t sample_type)
+inline void wave_save(const wchar_t *filepath, uint8_t *data, uint32_t data_size, uint16_t num_channels, uint32_t sample_rate, sample_type_t sample_type)
 {
     FILE *file = _wfopen(filepath, L"wb");
 
@@ -118,7 +116,7 @@ inline void wave_save(const wchar_t *filepath, cint8_t *data, int32_t data_size,
         exit(-1);
     }
 
-    int16_t bits_per_sample = wave_get_bits_per_sample(sample_type);
+    uint16_t bits_per_sample = wave_get_bits_per_sample(sample_type);
 
     wave_data_chunk_t data_chunk = {
         .subchunk_id = LE_DATA_CHUNK_ID,
@@ -170,14 +168,14 @@ inline wave_t wave_open(const wchar_t *filepath)
         exit(-1);
     }
 
-    int32_t calculated_chunk_size = get_file_size(file) - NORMAL_CHUNK_OFFSET;
+    uint32_t calculated_chunk_size = get_file_size(file) - NORMAL_CHUNK_OFFSET;
 
     wave_t wave_file = {0};
     wave_riff_chunk_t riff_chunk = {0};
     wave_fmt_chunk_t fmt_chunk = {0};
     wave_data_chunk_t data_chunk = {0};
 
-    int32_t chunk_id = 0;
+    uint32_t chunk_id = 0;
 
     fread(&riff_chunk, sizeof(riff_chunk), 1, file);
 
@@ -209,15 +207,13 @@ inline wave_t wave_open(const wchar_t *filepath)
         exit(-1);
     }
 
-    
-    int32_t calculated_byte_rate = wave_calculate_byte_rate(fmt_chunk.sample_rate, fmt_chunk.num_channels, fmt_chunk.bits_per_sample);
+    uint32_t calculated_byte_rate = wave_calculate_byte_rate(fmt_chunk.sample_rate, fmt_chunk.num_channels, fmt_chunk.bits_per_sample);
     if(fmt_chunk.byte_rate != calculated_byte_rate) {
         fprintf(stderr, "BYTE_RATE:\nByte rate is not equal to calculated byte rate\nGot: %i\nExpected: %i\n", fmt_chunk.byte_rate, calculated_byte_rate);
         exit(-1);
     }
 
-    
-    int32_t calculated_block_align = wave_calculate_block_align(fmt_chunk.num_channels, fmt_chunk.bits_per_sample);
+    uint32_t calculated_block_align = wave_calculate_block_align(fmt_chunk.num_channels, fmt_chunk.bits_per_sample);
     if(fmt_chunk.block_align != calculated_block_align) {
         fprintf(stderr, "BLOCK_ALIGN:\nBlock align is not equal to calculated block align\nGot: %i\nExpected: %i\n", fmt_chunk.block_align, calculated_block_align);
         exit(-1);
@@ -226,14 +222,14 @@ inline wave_t wave_open(const wchar_t *filepath)
     fread(&chunk_id, sizeof(chunk_id), 1, file);
     switch(chunk_id) {
         case LE_LIST_CHUNK_ID: {
-            int32_t list_subchunk_size = 0;
+            uint32_t list_subchunk_size = 0;
             fread(&list_subchunk_size, sizeof(list_subchunk_size), 1, file);
             calculated_chunk_size -= (list_subchunk_size + NORMAL_CHUNK_OFFSET);
             fseek(file, list_subchunk_size, SEEK_CUR);
             break;
         }
         case LE_DATA_CHUNK_ID: {
-            int32_t current_file_pointer_position = ftell(file);
+            uint32_t current_file_pointer_position = ftell(file);
             fseek(file, current_file_pointer_position - sizeof(chunk_id), SEEK_SET);
             break;
         }
@@ -248,13 +244,13 @@ inline wave_t wave_open(const wchar_t *filepath)
 
     fread(&data_chunk.subchunk_size, sizeof(data_chunk.subchunk_size), 1, file);
 
-    int32_t calculated_data_subchunk_size = calculated_chunk_size - sizeof(fmt_chunk) - sizeof(riff_chunk);
+    uint32_t calculated_data_subchunk_size = calculated_chunk_size - sizeof(fmt_chunk) - sizeof(riff_chunk);
     if(data_chunk.subchunk_size > calculated_data_subchunk_size) {
         fprintf(stderr, "DATA_SUBCHUNK_SIZE:\nGot: 0x%04x\nExpected: 0x%04x\n", data_chunk.subchunk_size, calculated_data_subchunk_size);
         exit(-1);
     }
 
-    data_chunk.data = (cint8_t *) malloc(sizeof(data_chunk.data) * data_chunk.subchunk_size);
+    data_chunk.data = (uint8_t *) malloc(sizeof(data_chunk.data) * data_chunk.subchunk_size);
     if (!data_chunk.data) {
         fprintf(stderr, "MALLOC:\nFailed to allocate memory of size: %lli\n", sizeof(data_chunk.data) * data_chunk.subchunk_size);
         exit(-1);
