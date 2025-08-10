@@ -9,14 +9,36 @@ extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 
-#define RIFF_CHUNK_ID 0x52494646
-#define WAVE_CHUNK_ID 0x57415645
-#define FMT_CHUNK_ID 0x666d7420
-#define DATA_CHUNK_ID 0x64617461
+// Main Chunks
+#define BE_RIFF_CHUNK_ID 0x52494646
+#define BE_WAVE_CHUNK_ID 0x57415645
+#define BE_FMT_CHUNK_ID 0x666d7420
+#define BE_DATA_CHUNK_ID 0x64617461
 
-#define LIST_CHUNK_ID 0x4C495354
+#define LE_RIFF_CHUNK_ID 0x46464952
+#define LE_WAVE_CHUNK_ID 0x45564157
+#define LE_FMT_CHUNK_ID 0x20746d66
+#define LE_DATA_CHUNK_ID 0x61746164
 
+// Skippable chunks
+#define BE_LIST_CHUNK_ID 0x4C495354
+#define LE_LIST_CHUNK_ID 0x5453494C
+
+// Offsets
+#define RIFF_CHUNK_OFFSET 4
+#define NORMAL_CHUNK_OFFSET 8
+
+// Audio Formats
 #define PCM_AUDIO_FORMAT 1
+
+// PCM Specific
+#define PCM_FMT_CHUNK_SIZE 16
+
+typedef enum sample_type_t {
+    suint8,
+    suint16,
+    sfloat32
+} sample_type_t;
 
 typedef char cint8_t;
 
@@ -50,18 +72,6 @@ typedef struct wave_t {
     uint8_t is_loaded;
 } wave_t;
 
-/*
-    Swaps endianes
-*/
-inline int32_t swap_endian(int32_t orgint)
-{
-    int32_t be_int = 0;
-    int8_t size = sizeof(orgint);
-    for(int8_t i = 0; i < size; ++i) {
-        ((int8_t *) &be_int)[i] = ((int8_t *) &orgint)[size - 1 - i];
-    }
-    return be_int;
-}
 
 inline int32_t get_file_size(FILE *file)
 {
@@ -69,6 +79,86 @@ inline int32_t get_file_size(FILE *file)
     int32_t size = ftell(file);
     rewind(file);
     return size;
+}
+
+inline int32_t wave_calculate_byte_rate(int32_t sample_rate, int16_t num_channels, int16_t bits_per_sample)
+{
+    return sample_rate * num_channels * (bits_per_sample / 8);
+}
+
+inline int16_t wave_calculate_block_align(int16_t num_channels, int16_t bits_per_sample)
+{
+    return num_channels * (bits_per_sample / 8);
+}
+
+inline int16_t wave_get_bits_per_sample(sample_type_t sample_type)
+{
+    switch (sample_type) {
+        case suint8: {
+            return 8;
+        }
+        case suint16: {
+            return 16;
+        }
+        case sfloat32: {
+            return 32;
+        }
+        default: {
+            return 8;
+        }
+    }
+}
+
+inline void wave_save(const wchar_t *filepath, cint8_t *data, int32_t data_size, int16_t num_channels, int32_t sample_rate, sample_type_t sample_type)
+{
+    FILE *file = _wfopen(filepath, L"wb");
+
+    if (!file) {
+        fprintf(stderr, "FILE_STREAM: Cannot open a file!\nFile: %ls\n", filepath);
+        exit(-1);
+    }
+
+    int16_t bits_per_sample = wave_get_bits_per_sample(sample_type);
+
+    wave_data_chunk_t data_chunk = {
+        .subchunk_id = LE_DATA_CHUNK_ID,
+        .subchunk_size = data_size,
+        .data = data
+    };
+    
+    wave_fmt_chunk_t fmt_chunk = {
+        .subchunk_id = LE_FMT_CHUNK_ID,
+        .subchunk_size = PCM_FMT_CHUNK_SIZE,
+        .audio_format = PCM_AUDIO_FORMAT,
+        .num_channels = num_channels,
+        .sample_rate = sample_rate,
+        .byte_rate = wave_calculate_byte_rate(sample_rate, num_channels, bits_per_sample),
+        .block_align = wave_calculate_block_align(num_channels, bits_per_sample),
+        .bits_per_sample = bits_per_sample
+    };
+
+    wave_riff_chunk_t riff_chunk = {
+        .chunk_id = LE_RIFF_CHUNK_ID,
+        .chunk_size = RIFF_CHUNK_OFFSET + (NORMAL_CHUNK_OFFSET + PCM_FMT_CHUNK_SIZE) + (NORMAL_CHUNK_OFFSET + data_size),
+        .format = LE_WAVE_CHUNK_ID
+    };
+
+    fwrite(&riff_chunk, sizeof(riff_chunk), 1, file);
+    
+    fwrite(&fmt_chunk.subchunk_id, sizeof(fmt_chunk.subchunk_id), 1, file);
+    fwrite(&fmt_chunk.subchunk_size, sizeof(fmt_chunk.subchunk_size), 1, file);
+    fwrite(&fmt_chunk.audio_format, sizeof(fmt_chunk.audio_format), 1, file);
+    fwrite(&fmt_chunk.num_channels, sizeof(fmt_chunk.num_channels), 1, file);
+    fwrite(&fmt_chunk.sample_rate, sizeof(fmt_chunk.sample_rate), 1, file);
+    fwrite(&fmt_chunk.byte_rate, sizeof(fmt_chunk.byte_rate), 1, file);
+    fwrite(&fmt_chunk.block_align, sizeof(fmt_chunk.block_align), 1, file);
+    fwrite(&fmt_chunk.bits_per_sample, sizeof(fmt_chunk.bits_per_sample), 1, file);
+
+    fwrite(&data_chunk.subchunk_id, sizeof(data_chunk.subchunk_id), 1, file);
+    fwrite(&data_chunk.subchunk_size, sizeof(data_chunk.subchunk_size), 1, file);
+    fwrite(data_chunk.data, data_size, 1, file);
+
+    fclose(file);
 }
 
 inline wave_t wave_open(const wchar_t *filepath)
@@ -80,7 +170,7 @@ inline wave_t wave_open(const wchar_t *filepath)
         exit(-1);
     }
 
-    int32_t calculated_chunk_size = get_file_size(file) - 8;
+    int32_t calculated_chunk_size = get_file_size(file) - NORMAL_CHUNK_OFFSET;
 
     wave_t wave_file = {0};
     wave_riff_chunk_t riff_chunk = {0};
@@ -91,8 +181,8 @@ inline wave_t wave_open(const wchar_t *filepath)
 
     fread(&riff_chunk, sizeof(riff_chunk), 1, file);
 
-    if(swap_endian(riff_chunk.chunk_id) != RIFF_CHUNK_ID) {
-        fprintf(stderr, "RIFF_CHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", riff_chunk.chunk_id, RIFF_CHUNK_ID);
+    if(riff_chunk.chunk_id != LE_RIFF_CHUNK_ID) {
+        fprintf(stderr, "RIFF_CHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", riff_chunk.chunk_id, BE_RIFF_CHUNK_ID);
         exit(-1);
     }
 
@@ -101,15 +191,15 @@ inline wave_t wave_open(const wchar_t *filepath)
         exit(-1);
     }
 
-    if(swap_endian(riff_chunk.format) != WAVE_CHUNK_ID) {
-        fprintf(stderr, "WAVE_CHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", riff_chunk.format, WAVE_CHUNK_ID);
+    if(riff_chunk.format != LE_WAVE_CHUNK_ID) {
+        fprintf(stderr, "WAVE_CHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", riff_chunk.format, BE_WAVE_CHUNK_ID);
         exit(-1);
     }
 
     fread(&fmt_chunk, sizeof(fmt_chunk), 1, file);
 
-    if(swap_endian(fmt_chunk.subchunk_id) != FMT_CHUNK_ID) {
-        fprintf(stderr, "FMT_SUBCHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", fmt_chunk.subchunk_id, FMT_CHUNK_ID);
+    if(fmt_chunk.subchunk_id != LE_FMT_CHUNK_ID) {
+        fprintf(stderr, "FMT_SUBCHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", fmt_chunk.subchunk_id, BE_FMT_CHUNK_ID);
         exit(-1);
     }
 
@@ -119,28 +209,30 @@ inline wave_t wave_open(const wchar_t *filepath)
         exit(-1);
     }
 
-    int32_t calculated_byte_rate = fmt_chunk.sample_rate * fmt_chunk.num_channels * fmt_chunk.bits_per_sample / 8;
+    
+    int32_t calculated_byte_rate = wave_calculate_byte_rate(fmt_chunk.sample_rate, fmt_chunk.num_channels, fmt_chunk.bits_per_sample);
     if(fmt_chunk.byte_rate != calculated_byte_rate) {
         fprintf(stderr, "BYTE_RATE:\nByte rate is not equal to calculated byte rate\nGot: %i\nExpected: %i\n", fmt_chunk.byte_rate, calculated_byte_rate);
         exit(-1);
     }
 
-    int32_t calculated_block_align = fmt_chunk.num_channels * fmt_chunk.bits_per_sample / 8;
+    
+    int32_t calculated_block_align = wave_calculate_block_align(fmt_chunk.num_channels, fmt_chunk.bits_per_sample);
     if(fmt_chunk.block_align != calculated_block_align) {
         fprintf(stderr, "BLOCK_ALIGN:\nBlock align is not equal to calculated block align\nGot: %i\nExpected: %i\n", fmt_chunk.block_align, calculated_block_align);
         exit(-1);
     }
 
     fread(&chunk_id, sizeof(chunk_id), 1, file);
-    switch(swap_endian(chunk_id)) {
-        case LIST_CHUNK_ID: {
+    switch(chunk_id) {
+        case LE_LIST_CHUNK_ID: {
             int32_t list_subchunk_size = 0;
             fread(&list_subchunk_size, sizeof(list_subchunk_size), 1, file);
-            calculated_chunk_size -= (list_subchunk_size + 8);
+            calculated_chunk_size -= (list_subchunk_size + NORMAL_CHUNK_OFFSET);
             fseek(file, list_subchunk_size, SEEK_CUR);
             break;
         }
-        case DATA_CHUNK_ID: {
+        case LE_DATA_CHUNK_ID: {
             int32_t current_file_pointer_position = ftell(file);
             fseek(file, current_file_pointer_position - sizeof(chunk_id), SEEK_SET);
             break;
@@ -149,20 +241,24 @@ inline wave_t wave_open(const wchar_t *filepath)
 
     fread(&data_chunk.subchunk_id, sizeof(data_chunk.subchunk_id), 1, file);
 
-    if(swap_endian(data_chunk.subchunk_id) != DATA_CHUNK_ID) {
-        fprintf(stderr, "DATA_SUBCHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", data_chunk.subchunk_id, DATA_CHUNK_ID);
+    if(data_chunk.subchunk_id != LE_DATA_CHUNK_ID) {
+        fprintf(stderr, "DATA_SUBCHUNK_ID:\nGot: 0x%04x\nExpected: 0x%04x\n", data_chunk.subchunk_id, BE_DATA_CHUNK_ID);
         exit(-1);
     }
 
     fread(&data_chunk.subchunk_size, sizeof(data_chunk.subchunk_size), 1, file);
 
-    int32_t calculated_data_subchunk_size = calculated_chunk_size - sizeof(fmt_chunk) - 12;
+    int32_t calculated_data_subchunk_size = calculated_chunk_size - sizeof(fmt_chunk) - sizeof(riff_chunk);
     if(data_chunk.subchunk_size > calculated_data_subchunk_size) {
         fprintf(stderr, "DATA_SUBCHUNK_SIZE:\nGot: 0x%04x\nExpected: 0x%04x\n", data_chunk.subchunk_size, calculated_data_subchunk_size);
         exit(-1);
     }
 
     data_chunk.data = (cint8_t *) malloc(sizeof(data_chunk.data) * data_chunk.subchunk_size);
+    if (!data_chunk.data) {
+        fprintf(stderr, "MALLOC:\nFailed to allocate memory of size: %lli\n", sizeof(data_chunk.data) * data_chunk.subchunk_size);
+        exit(-1);
+    }
     fread(data_chunk.data, data_chunk.subchunk_size, 1, file);
 
     fclose(file);
