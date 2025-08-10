@@ -1,5 +1,5 @@
-#ifndef WOPP_LIB_WAVE_H
-#define WOPP_LIB_WAVE_H
+#ifndef LIB_WAVE_H
+#define LIB_WAVE_H
 
 #ifdef _cplusplus
 extern "C" {
